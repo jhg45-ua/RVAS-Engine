@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.25 FATAL_ERROR)
 
-project(CWR
-    VERSION 1.0.0
+project(VRAS-Engine
+    VERSION 0.0.1
     LANGUAGES CXX C
-    DESCRIPTION "Arma: Cold War Assault - Remastered"
+    DESCRIPTION "Virtual Reality Apple Silicon Engine (VRAS-Engine) - Apple Silicon port"
 )
 
 set(CMAKE_CXX_STANDARD 20)
@@ -418,3 +418,29 @@ add_custom_target(FileSize
     COMMENT "Checking source file sizes (warn > 3000, error > 5000)"
     VERBATIM
 )
+
+# ── PUENTE DE INSTALACIÓN AUTOMATIZADA A DISCO DE RED (Z:) ───────────────────
+if(WIN32)
+    # ${PROJECT_NAME}
+    message(STATUS "Destino de despliegue automatizado: ${CMAKE_INSTALL_PREFIX}/${PROJECT_NAME}")
+
+    # 🛡️ GUARD DE SEGURIDAD: Comprobación del disco de red en tiempo de instalación
+    install(CODE [=[
+        if(NOT EXISTS "${CMAKE_INSTALL_PREFIX}")
+            message(FATAL_ERROR 
+                "\n\n======================================================================\n"
+                "[RVAS-Engine] ERROR CRÍTICO DE DESPLIEGUE:\n"
+                "La unidad de red '${CMAKE_INSTALL_PREFIX}' NO está disponible en esta terminal.\n"
+                "======================================================================\n"
+            )
+        endif()
+    ]=])
+
+    # Copiar el contenido exacto de la distribución de esta Build (incluyendo PoseidonTools en /tools)
+    # directamente dentro de la carpeta del proyecto (Z:/${PROJECT_NAME}/)
+    if(EXISTS "${DIST_DIR}")
+        install(DIRECTORY "${DIST_DIR}/" 
+                DESTINATION "${PROJECT_NAME}"
+        )
+    endif()
+endif()

@@ -45,7 +45,8 @@
       "binaryDir": "${sourceDir}/build/win-x64-clang-rwdi",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows-clang",
-        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/win-x64-clang.cmake"
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/win-x64-clang.cmake",
+        "CMAKE_INSTALL_PREFIX": "Z:/"
       }
     },
     {
