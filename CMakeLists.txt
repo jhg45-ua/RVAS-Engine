@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.25 FATAL_ERROR)
 
-project(VRAS-Engine
+project(RVAS-Engine
     VERSION 0.0.1
     LANGUAGES CXX C
-    DESCRIPTION "Virtual Reality Apple Silicon Engine (VRAS-Engine) - Apple Silicon port"
+    DESCRIPTION "Real Virtuality 1 Apple Silicon Engine (RVAS-Engine) - Apple Silicon port"
 )
 
 set(CMAKE_CXX_STANDARD 20)

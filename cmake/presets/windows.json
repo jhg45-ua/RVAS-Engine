@@ -46,7 +46,7 @@
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows-clang",
         "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/win-x64-clang.cmake",
-        "CMAKE_INSTALL_PREFIX": "Z:/"
+        "CMAKE_INSTALL_PREFIX": "Z:"
       }
     },
     {

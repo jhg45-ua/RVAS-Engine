@@ -1,13 +1,13 @@
-#define APP_VERSION_MAJOR 3
-#define APP_VERSION_MINOR 00
-#define APP_VERSION_TEXT "3.0"
+#define APP_VERSION_MAJOR 0
+#define APP_VERSION_MINOR 01
+#define APP_VERSION_TEXT "0.0.1"
 
 #if _GALATEA
 #define APP_NAME				"Galatea"
 #define APP_NAME_SHORT	"Galatea"
 #else
-#define APP_NAME				"Arma: Cold War Assault - Remastered"
-#define APP_NAME_SHORT	"CWR"
+#define APP_NAME		"Real Virtuality Apple Silicon - Engine"
+#define APP_NAME_SHORT	"RVAS-Engine"
 #endif
 
 #define APP_VERSION_NUM	APP_VERSION_MAJOR*100+APP_VERSION_MINOR

@@ -255,8 +255,8 @@ void AppConfig::ParseCommandLine(int argc, char** argv)
         const CliAppRole appRole = DetectAppRole(normalizedArgs);
         const bool serverRole = appRole == CliAppRole::Server;
 
-        CLI::App app{serverRole ? "Arma: Cold War Assault - Remastered Dedicated Server"
-                                : "Arma: Cold War Assault - Remastered"};
+        CLI::App app{serverRole ? "Real Virtuality Apple Silicon - Engine Dedicated Server"
+                                : "Real Virtuality Apple Silicon - Engine"};
 
         // Disable default help flag so we can reuse -h for --height
         app.set_help_flag("--help,--help-full", "Print help and exit");

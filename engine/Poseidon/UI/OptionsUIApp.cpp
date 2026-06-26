@@ -126,7 +126,7 @@ RString GetAppVersion()
     RString renderer = GEngine ? GEngine->GetRendererName() : "No renderer";
 
     char buf[160];
-    snprintf(buf, sizeof(buf), "%s (%s, %s)", (const char*)GetVersionString(), platform, (const char*)renderer);
+    snprintf(buf, sizeof(buf), "RVAS-Engine %s (%s, %s)", (const char*)GetVersionString(), platform, (const char*)renderer);
     return buf;
 }
 
@@ -292,6 +292,18 @@ Control* DisplayMain::OnCreateCtrl(int type, int idc, const ParamEntry& cls)
         {
             CStatic* text = new CStatic(this, idc, cls);
             text->SetText(_version);
+            
+
+            // Parche rapido
+            // Expandir el ancho manteniendo el centro original
+            float origW = text->W();
+            float newW = origW * 3.0f; // Triplicamos el ancho
+
+            // Restamos la mitad del aumento de ancho a X para que crezca simétricamente hacia la izquierda y derecha
+            float newX = text->X() - (newW - origW) / 2.0f;
+
+            text->SetPos(newX, text->Y(), newW, text->H());
+
             return text;
         }
         case IDC_MAIN_DATE:

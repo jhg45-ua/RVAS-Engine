@@ -354,7 +354,7 @@ EngineGL33::EngineGL33(int width, int height, bool windowed, int bpp)
             break;
     }
 
-    _sdlWindow = SDL_CreateWindow("Poseidon [GL33]", placement.width, placement.height, flags);
+    _sdlWindow = SDL_CreateWindow("RVAS-Engine [GL33]", placement.width, placement.height, flags);
     if (!_sdlWindow)
     {
         LOG_ERROR(Graphics, "GL33: SDL_CreateWindow failed: {}", SDL_GetError());
