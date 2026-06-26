@@ -7,9 +7,11 @@ Este documento proporciona una guía detallada de la arquitectura del repositori
 ## Índice
 * [1. Mapeo de Directorios (Aislamiento Motor vs. Juego)](#1-mapeo-de-directorios-aislamiento-motor-vs-juego)
 * [2. Ruta de Lectura Crítica (Reading Path)](#2-ruta-de-lectura-crítica-reading-path)
-* [3. Puntos Calientes de Arquitectura y Portabilidad](#3-puntos-calientes-de-arquitectura-y-portabilidad)
+* [3. Puntos Calientes de Arquitectura y Portabilidad](#3-puntos-calientes-de-architectura-y-portabilidad)
 * [4. Subsistemas Avanzados del Motor (Memoria, Scripting y Concurrencia)](#4-subsistemas-avanzados-del-motor-memoria-scripting-y-concurrencia)
 * [5. Validación del Stack y Flujo Lineal de Lectura del Código](#5-validación-del-stack-y-flujo-lineal-de-lectura-del-código)
+* [6. Guía Didáctica del Motor Gráfico y RHI (para Principiantes)](#6-guía-didáctica-del-motor-gráfico-y-rhi-para-principiantes)
+* [7. Guía Didáctica del Bucle de Juego y Simulación (para Principiantes)](#7-guía-didáctica-del-bucle-de-juego-y-simulación-para-principiantes)
 
 ---
 
@@ -215,7 +217,233 @@ graph TD
 #### Paso 7: Renderizado Final y Swap
 14. **[engine/PoseidonGL33/EngineGL33_Shaders.cpp](../engine/PoseidonGL33/EngineGL33_Shaders.cpp)**: Compila y aplica programas GLSL para sombreado y configuración de buffers de uniformes.
 15. **[engine/PoseidonGL33/EngineGL33_VertexBuffer.cpp](../engine/PoseidonGL33/EngineGL33_VertexBuffer.cpp)**: Transfiere datos de vértices a la GPU (actualizando VBOs/VAOs/IBOs).
-16. **[engine/PoseidonGL33/EngineGL33_Draw.cpp](../engine/PoseidonGL33/EngineGL33_Draw.cpp)**: Ejecuta llamadas de dibujado de bajo nivel (`glDrawElements`/`glDrawArrays`).
-17. **[engine/PoseidonGL33/EngineGL33_Lifecycle.cpp](../engine/PoseidonGL33/EngineGL33_Lifecycle.cpp)**: En `FinishDraw`, realiza el swap final del framebuffer de OpenGL en la ventana física de SDL3 (`SDL_GL_SwapWindow`).
+16: **[engine/PoseidonGL33/EngineGL33_Draw.cpp](../engine/PoseidonGL33/EngineGL33_Draw.cpp)**: Ejecuta llamadas de dibujado de bajo nivel (`glDrawElements`/`glDrawArrays`).
+17: **[engine/PoseidonGL33/EngineGL33_Lifecycle.cpp](../engine/PoseidonGL33/EngineGL33_Lifecycle.cpp)**: En `FinishDraw`, realiza el swap final del framebuffer de OpenGL en la ventana física de SDL3 (`SDL_GL_SwapWindow`).
+
+[🔼 Volver al Índice](#índice)
+
+---
+
+## 6. Guía Didáctica del Motor Gráfico y RHI (para Principiantes)
+[🔼 Volver al Índice](#índice)
+
+Si no tienes experiencia previa en el desarrollo de motores gráficos, los términos y estructuras de bajo nivel en OpenGL pueden resultar confusos. Esta sección explica de forma didáctica los conceptos del motor de RVAS-Engine con ejemplos de código simplificados basados en su implementación real.
+
+### A. ¿Qué es la RHI (Render Hardware Interface)?
+Imagina que estás escribiendo la lógica de un juego (como mover un tanque o detectar un disparo). No quieres que ese código se preocupe de si la tarjeta gráfica usa OpenGL, Vulkan o DirectX. 
+Para resolver esto, los motores usan una **RHI** (Interfaz de Hardware de Renderizado):
+* **La Fachada (Abstracta)**: El juego solo llama a funciones generales como `GEngine->BeginFrame()` o `GEngine->Draw()`. Estas funciones se definen en la interfaz abstracta **[IGraphicsEngine.hpp](../engine/Poseidon/Graphics/IGraphicsEngine.hpp)**.
+* **El Ejecutor (Concreto)**: El motor implementa esa interfaz en un backend gráfico específico. En nuestro caso, la clase **`EngineGL33`** en **[EngineGL33.cpp](../engine/PoseidonGL33/EngineGL33.cpp)** traduce esas peticiones abstractas a comandos reales de OpenGL.
+
+```cpp
+// Ejemplo conceptual: La lógica del juego solo hace esto
+void World::DrawObject(Object* obj) {
+    // El juego no sabe qué API gráfica hay detrás
+    GEngine->DrawMesh(obj->GetMesh()); 
+}
+```
+
+Si en el futuro se quiere migrar el juego a DirectX 12, solo se debe escribir un archivo `EngineDX12.cpp` que implemente la interfaz `IGraphicsEngine`. La lógica del juego no requerirá ningún cambio.
+
+---
+
+### B. De la CPU a la GPU: Envíos de Geometría (VBO, IBO, VAO)
+Un modelo 3D (como un soldado o un fusil) está compuesto por una malla de triángulos. Para dibujarlo en la tarjeta gráfica (GPU), el motor debe subir y organizar esa geometría en tres tipos de objetos de OpenGL:
+
+1. **VBO (Vertex Buffer Object)**: Es un array contiguo de memoria en la GPU que almacena los **vértices** (los puntos 3D en el espacio). Cada vértice contiene su posición `(X, Y, Z)`, coordenadas de textura `(U, V)` y la normal vector `(nX, nY, nZ)` para calcular las luces.
+2. **IBO (Index Buffer Object)**: Almacena los **índices** (números que indican el orden en que se deben conectar los vértices para formar triángulos). Esto evita duplicar vértices que se comparten entre varios triángulos, ahorrando memoria de video.
+3. **VAO (Vertex Array Object)**: Es el "mapa de formato". Le dice a OpenGL cómo debe interpretar los datos binarios dentro del VBO (ej. "los primeros 12 bytes son la posición, los siguientes 8 bytes son la textura, etc.").
+
+En **[EngineGL33_VertexBuffer.cpp](../engine/PoseidonGL33/EngineGL33_VertexBuffer.cpp)** vemos cómo el motor configura esto en la GPU:
+
+```cpp
+// Simplificación de cómo el motor crea buffers geométricos en la GPU
+void CreateGeometryBuffers(const MeshSource& src) {
+    GLuint vao, vbo, ibo;
+
+    // 1. Crear el VAO (El mapa de formato de vértices)
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
+    // 2. Crear y subir los vértices al VBO
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, src.VertexCount() * sizeof(Vertex), src.VertexData(), GL_STATIC_DRAW);
+
+    // 3. Crear y subir los índices al IBO (Conexiones de triángulos)
+    glGenBuffers(1, &ibo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, src.IndexCount() * sizeof(uint16_t), src.IndexData(), GL_STATIC_DRAW);
+}
+```
+
+---
+
+### C. Pintores de la GPU: Shaders y Uniforms
+Una vez que la geometría está en la GPU, se necesitan dos programas pequeños (escritos en lenguaje GLSL) para dibujarla en pantalla:
+* **Vertex Shader**: Se ejecuta para cada vértice de la malla. Recibe su posición 3D local y la multiplica por matrices de proyección y cámara para determinar dónde debe dibujarse en tu pantalla plana de 2D.
+* **Pixel/Fragment Shader**: Se ejecuta para cada píxel que cubre el triángulo en la pantalla. Su trabajo es calcular el color final del píxel aplicando luces, niebla y texturas.
+
+#### Uniforms y UBOs (Uniform Buffer Objects)
+Los *Uniforms* son variables constantes enviadas desde la CPU (el código del juego) a los shaders de la GPU (como la posición de la luz, el color de la niebla o la matriz de la cámara). 
+Para optimizar, el motor usa **UBOs** (bloques de uniformes). En lugar de enviar las variables una a una (lo cual es lento), el motor empaqueta toda la información global en un buffer estructurado de memoria y lo sube de golpe:
+
+En **[EngineGL33_Shaders.cpp](../engine/PoseidonGL33/EngineGL33_Shaders.cpp)** se enlazan estos UBOs globales:
+
+```cpp
+// Configuración de un UBO en Shaders.cpp
+struct WorldUniforms {
+    float time;
+    float cameraNear;
+    float cameraFar;
+    float fogDensity;
+};
+
+// Subida en bloque a la GPU
+glBindBuffer(GL_UNIFORM_BUFFER, s_worldUBO);
+glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(WorldUniforms), &myWorldData);
+```
+
+---
+
+### D. Optimización Crítica: Colas de Dibujo (Render Queues)
+Si el juego dibuja cada soldado, árbol y vehículo uno por uno haciendo una llamada de dibujo (`glDraw`) individual, el juego funcionará muy lento. Esto se debe al sobrecoste de CPU al cambiar de estado en la tarjeta gráfica (cambiar de textura o shader constantemente).
+
+Para optimizar esto, `RVAS-Engine` utiliza **Render Queues** (Colas de Dibujo) en **[EngineGL33_Queue.cpp](../engine/PoseidonGL33/EngineGL33_Queue.cpp)**:
+1. Cuando el juego simula un objeto, **no lo dibuja de inmediato**. En su lugar, empaqueta su dibujo en una cola (`QueueAdd`).
+2. El motor ordena las peticiones de dibujo por material y textura (`TriQueue`).
+3. Cuando la cola se llena, o cuando termina el frame, el motor procesa la cola de golpe (`FlushQueue`). Enlaza la textura y el shader **una sola vez** y dibuja cientos de triángulos juntos mediante una única llamada de dibujo de hardware:
+
+```cpp
+// Código real simplificado de EngineGL33_Queue.cpp (Línea 131)
+void EngineGL33::FlushQueue(QueueGL33& queue, int index) {
+    TriQueue& triq = queue._tri[index];
+    int n = triq._triangleQueue.Size(); // Cantidad de triángulos agrupados
+    
+    if (n > 0) {
+        // Enlazar el VAO y subir los índices juntos a la GPU
+        glBindVertexArray(_vaoScreen);
+        
+        // ¡Una sola llamada dibuja todo el grupo de forma masiva!
+        glDrawElements(GL_TRIANGLES, n, GL_UNSIGNED_SHORT, (void*)(indexOffset * sizeof(WORD)));
+        
+        // Limpiar la cola para el próximo cuadro
+        triq._triangleQueue.Clear();
+    }
+}
+```
+
+### E. El Flujo de Trabajo en Pases (Render Passes)
+Para generar el fotograma final que ves en pantalla, el motor no dibuja todo en un solo paso, sino que divide el trabajo en **Pases**:
+1. **Pase de Sombras**: El motor renderiza los objetos de la escena desde la perspectiva del sol o luces a una textura especial (Shadow Map). Solo almacena la profundidad/distancia, lo que permite saber qué partes están en sombra.
+2. **Pase Opaco (Mundo)**: Renderiza el terreno y los modelos aplicando las texturas y el mapa de sombras generado en el paso anterior.
+3. **Pase Translúcido**: Dibuja elementos transparentes (humo, agua, cristales) ordenándolos de atrás hacia adelante para que la mezcla de colores sea correcta.
+4. **Pase de Interfaz (GUI/2D)**: Dibuja el HUD, el menú de inventario y texto en 2D en la parte superior sin aplicar sombras ni 3D.
+
+[🔼 Volver al Índice](#índice)
+
+---
+
+## 7. Guía Didáctica del Bucle de Juego y Simulación (para Principiantes)
+[🔼 Volver al Índice](#índice)
+
+Un videojuego no es una película estática; es una simulación dinámica que cambia en tiempo real en respuesta a las acciones del jugador. Esto se logra mediante dos conceptos clave: el **Bucle de Juego (Game Loop)** y el **Timestep Variable (Delta Time)**.
+
+### A. ¿Qué es el Bucle de Juego (Game Loop)?
+Imagina un bucle `while` infinito que se ejecuta continuamente mientras la aplicación esté abierta. En cada iteración del bucle (que representa un **cuadro/frame**), el motor realiza secuencialmente tres tareas fundamentales:
+1. **Procesar Eventos (Input)**: Leer qué teclas pulsó el jugador o si movió el ratón.
+2. **Simular (Update)**: Actualizar la física del mundo, mover a los enemigos, calcular la balística de las balas y ejecutar scripts.
+3. **Dibujar (Render)**: Enviar la información actualizada a la tarjeta gráfica para que la dibuje en la pantalla.
+
+En **[GameApplication.cpp](../apps/cwr/Game/GameApplication.cpp#L991)**, el bucle principal tiene este aspecto simplificado:
+
+```cpp
+// El corazón del motor: bucle principal infinito
+void GameApplication::RunMainLoop() {
+    while (!m_closeRequest) // Mientras el jugador no cierre la ventana
+    {
+        // 1. Mantener vivo el sistema y procesar mensajes del sistema operativo (SDL3)
+        GDebugger.ProcessAlive(); 
+        
+        // 2. Ejecutar un paso completo del motor (Simulación + Dibujado)
+        Poseidon::AppIdle(); 
+        
+        // 3. Comprobar abortos de seguridad
+        PollStrictAbort(); 
+    }
+}
+```
+
+---
+
+### B. Frames vs. Tiempo Real: El Concepto de Delta Time (`deltaT`)
+Si ejecutas un bucle `while` sin control en una CPU muy rápida, el juego podría ejecutarse a 500 FPS (cuadros por segundo). En una CPU vieja, a 30 FPS. Si la velocidad de simulación dependiera directamente de los FPS, **los personajes se moverían 16 veces más rápido en la computadora moderna que en la vieja**.
+
+Para evitar esto, el motor mide cuánto tiempo real ha transcurrido desde el último frame (este valor en segundos se llama **Delta Time** o **`deltaT`**):
+* Si el juego funciona a 60 FPS estables, cada frame tarda unos `0.016` segundos. `deltaT = 0.016`.
+* Si el juego baja a 30 FPS por carga gráfica, cada frame tarda `0.033` segundos. `deltaT = 0.033`.
+
+En **[GameLoop.cpp](../engine/Poseidon/Core/Game/GameLoop.cpp#L193-L215)**, el motor mide este tiempo transcurrido en milisegundos y lo convierte a segundos:
+
+```cpp
+// Medir el tiempo transcurrido entre este frame y el anterior
+static DWORD lastTime;
+DWORD actTime = Poseidon::Foundation::GlobalTickCount();
+DWORD deltaTMs = actTime - lastTime;
+lastTime = actTime;
+
+// Convertir milisegundos a segundos (ej. 16ms -> 0.016s)
+float deltaT = deltaTMs * 0.001f;
+
+// CAP DE SEGURIDAD (Capping):
+// Si el juego se congela un segundo por cargar un archivo, deltaT valdría 1.0.
+// Si avanzáramos la física 1 segundo de golpe, una bala atravesaría una pared sin colisionar.
+// Para evitarlo, limitamos deltaT a un máximo de 0.3 segundos.
+saturateMin(deltaT, 0.3f); 
+```
+
+Cuando movemos a un soldado, multiplicamos su velocidad por `deltaT`. Así, la distancia recorrida es constante independientemente de los FPS:
+$$\text{Distancia} = \text{Velocidad} \times \text{Delta Time}$$
+
+---
+
+### C. La Actualización del Mundo de Juego (`GWorld->Simulate`)
+Una vez calculado `deltaT`, el motor invoca a **`GWorld->Simulate(deltaT)`** en **[World.cpp](../engine/Poseidon/World/World.cpp#L121)**. Este método coordina el orden estricto de simulación de todos los subsistemas del juego:
+
+1. **Ejecutar Scripts (VM)**: Llama a la máquina virtual de scripting para procesar comandos creados por el diseñador de misiones.
+2. **IA Táctica (AICenter Ticks)**: Actualiza las decisiones y caminos (pathfinding) de los soldados controlados por el ordenador.
+3. **Simular Entidades Físicas (Vehículos y Soldados)**: Actualiza velocidades, suspensiones de vehículos terrestres y gravedad de la infantería.
+4. **Balística y Colisiones**: Calcula la posición de cada bala volando y comprueba si intersecta con la geometría del terreno o de algún personaje.
+5. **Render (Extracción de Escena)**: Si `enableDraw` es verdadero, el motor extrae qué objetos están frente a la cámara y los encola en la RHI gráfica.
+
+```cpp
+// Estructura lógica del método Simulate en World.cpp
+void World::Simulate(float deltaT, bool enableDraw) {
+    // 1. Actualizar el tiempo del mundo
+    _time += deltaT;
+    
+    // 2. Procesar la cola del motor de scripts del juego
+    ProcessScripts(deltaT);
+    
+    // 3. Simular la Inteligencia Artificial táctica de los escuadrones
+    _aiCenter->Simulate(deltaT);
+    
+    // 4. Actualizar la física de movimiento de todos los objetos activos
+    for (int i = 0; i < _entities.Size(); ++i) {
+        _entities[i]->SimulateMove(deltaT);
+    }
+    
+    // 5. Si es necesario dibujar el frame, preparar la extracción gráfica
+    if (enableDraw) {
+        // Frustum culling: descartar lo que la cámara no ve
+        ExtractVisibleObjects(); 
+        
+        // Dibujar el terreno
+        _scene.GetLandscape()->Draw(_scene); 
+    }
+}
+```
+
+Este flujo garantiza que la física y las colisiones estén completamente resueltas antes de que el motor gráfico intente dibujar el fotograma, evitando artefactos visuales desagradables (como objetos parpadeando o atravesando el suelo).
 
 [🔼 Volver al Índice](#índice)
